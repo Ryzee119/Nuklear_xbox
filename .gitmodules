@@ -1,0 +1,6 @@
+[submodule "Nuklear"]
+	path = Nuklear
+	url = https://github.com/Immediate-Mode-UI/Nuklear.git
+[submodule "pbgl"]
+	path = pbgl
+	url = https://github.com/fgsfdsfgs/pbgl.git
