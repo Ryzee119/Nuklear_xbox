@@ -14,7 +14,7 @@
 #define NK_SDL_GL2_H_
 
 #include <SDL2/SDL.h>
-NK_API struct nk_context*   nk_sdl_init(SDL_Window *win);
+NK_API struct nk_context*   nk_sdl_init(int w, int h);
 NK_API void                 nk_sdl_font_stash_begin(struct nk_font_atlas **atlas);
 NK_API void                 nk_sdl_font_stash_end(void);
 NK_API int                  nk_sdl_handle_event(SDL_Event *evt);
@@ -44,11 +44,23 @@ struct nk_sdl_vertex {
 };
 
 static struct nk_sdl {
-    SDL_Window *win;
+    int w;
+    int h;
     struct nk_sdl_device ogl;
     struct nk_context ctx;
     struct nk_font_atlas atlas;
 } sdl;
+
+#include <pbgl.h>
+static void *gpu_alloc(nk_handle unused, void *old, nk_size size)
+{
+    return pbgl_alloc(size, GL_FALSE);
+}
+
+static void gpu_free(nk_handle unused, void *ptr)
+{
+    pbgl_free(ptr);
+}
 
 NK_INTERN void
 nk_sdl_device_upload_atlas(const void *image, int width, int height)
@@ -71,8 +83,11 @@ nk_sdl_render(enum nk_anti_aliasing AA)
     int display_width, display_height;
     struct nk_vec2 scale;
 
-    SDL_GetWindowSize(sdl.win, &width, &height);
-    SDL_GL_GetDrawableSize(sdl.win, &display_width, &display_height);
+    width = sdl.w;
+    height = sdl.h;
+    display_width = sdl.w;
+    display_height = sdl.h;
+
     scale.x = (float)display_width/(float)width;
     scale.y = (float)display_height/(float)height;
 
@@ -129,7 +144,12 @@ nk_sdl_render(enum nk_anti_aliasing AA)
         config.line_AA = AA;
 
         /* convert shapes into vertexes */
-        nk_buffer_init_default(&vbuf);
+        //  On xbox, vertex buffer must be contiguous memory so replace allocator
+        struct nk_allocator alloc;
+        alloc.userdata.ptr = 0;
+        alloc.alloc = gpu_alloc;
+        alloc.free = gpu_free;
+        nk_buffer_init(&vbuf, &alloc, NK_BUFFER_DEFAULT_INITIAL_SIZE);
         nk_buffer_init_default(&ebuf);
         nk_convert(&sdl.ctx, &dev->cmds, &vbuf, &ebuf, &config);
 
@@ -201,9 +221,10 @@ nk_sdl_clipboard_copy(nk_handle usr, const char *text, int len)
 }
 
 NK_API struct nk_context*
-nk_sdl_init(SDL_Window *win)
+nk_sdl_init(int w, int h)
 {
-    sdl.win = win;
+    sdl.w = w;
+    sdl.h = h;
     nk_init_default(&sdl.ctx, 0);
     sdl.ctx.clip.copy = nk_sdl_clipboard_copy;
     sdl.ctx.clip.paste = nk_sdl_clipboard_paste;
@@ -243,7 +264,6 @@ nk_sdl_handle_event(SDL_Event *evt)
     } else if (ctx->input.mouse.ungrab) {
         int x = (int)ctx->input.mouse.prev.x, y = (int)ctx->input.mouse.prev.y;
         SDL_SetRelativeMouseMode(SDL_FALSE);
-        SDL_WarpMouseInWindow(sdl.win, x, y);
         ctx->input.mouse.ungrab = 0;
     }
 
